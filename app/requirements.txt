@@ -1,0 +1,4 @@
+flask==2.0.1
+requests==2.18.0
+Werkzeug==2.0.0
+Jinja2==3.0.0

@@ -25,7 +25,7 @@ metadata:
   name: secureops-service
 spec:
   selector:
-    app: secureops-app
+    app: secureops-app:latest
   ports:
   - port: 80
     targetPort: 5000

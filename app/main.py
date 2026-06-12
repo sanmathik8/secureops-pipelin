@@ -1,18 +1,25 @@
 from flask import Flask, jsonify
-import requests
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Gauge
+from trivy_metrics import get_vulnerability_counts
 
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 
-# Vulnerability metrics
-vuln_high = Gauge('vulnerability_high_count', 'Number of HIGH severity vulnerabilities')
-vuln_critical = Gauge('vulnerability_critical_count', 'Number of CRITICAL severity vulnerabilities')
+vuln_high = Gauge(
+    'vulnerability_high_count',
+    'Number of HIGH severity vulnerabilities'
+)
 
-# Set current known values from Trivy scan
-vuln_high.set(26)
-vuln_critical.set(5)
+vuln_critical = Gauge(
+    'vulnerability_critical_count',
+    'Number of CRITICAL severity vulnerabilities'
+)
+
+high, critical = get_vulnerability_counts()
+
+vuln_high.set(high)
+vuln_critical.set(critical)
 
 @app.route("/")
 def home():
@@ -24,10 +31,12 @@ def health():
 
 @app.route("/vuln-status")
 def vuln_status():
+    high, critical = get_vulnerability_counts()
+
     return jsonify({
-        "high": 26,
-        "critical": 5,
-        "status": "vulnerable"
+        "high": high,
+        "critical": critical,
+        "status": "vulnerable" if (high > 0 or critical > 0) else "secure"
     })
 
 if __name__ == "__main__":

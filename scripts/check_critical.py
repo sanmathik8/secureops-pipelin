@@ -1,4 +1,4 @@
-import json, sys
+import json
 
 with open("trivy-report.json") as f:
     data = json.load(f)

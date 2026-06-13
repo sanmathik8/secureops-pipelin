@@ -1,39 +1,73 @@
 import json
 
-def get_vulnerable_packages(report_file="trivy-report.json"):
-    vulnerable = {}
+def get_vulnerabilities(report_file="trivy-report.json"):
+    """reads trivy report and separates fixable and no-fix vulnerabilities"""
     with open(report_file) as f:
         data = json.load(f)
+    
+    fixable = {}
+    no_fix = {}
+
     for result in data.get("Results", []):
         for vuln in result.get("Vulnerabilities", []):
             severity    = vuln.get("Severity")
             package     = vuln.get("PkgName")
+            current_ver = vuln.get("InstalledVersion")
             fix_version = vuln.get("FixedVersion")
-            if severity in ["CRITICAL", "HIGH"] and package and fix_version:
-                vulnerable[package] = fix_version
-    return vulnerable
+            cve_id      = vuln.get("VulnerabilityID")
 
-def update_requirements(vulnerable_packages, req_file="app/requirements.txt"):
-    with open(req_file) as f:
-        lines = f.readlines()
-    updated_lines = []
-    for line in lines:
-        package_name = line.split("==")[0].strip().lower()
-        if package_name in vulnerable_packages:
-            safe_version = vulnerable_packages[package_name]
-            print(f"  Fixing: {package_name} → {safe_version}")
-            updated_lines.append(f"{package_name}=={safe_version}\n")
-        else:
-            updated_lines.append(line)
-    with open(req_file, "w") as f:
-        f.writelines(updated_lines)
+            if severity in ["CRITICAL", "HIGH"] and package:
+                if fix_version:
+                    fixable[package] = {
+                        "current": current_ver,
+                        "fix_to": fix_version,
+                        "cve": cve_id
+                    }
+                else:
+                    no_fix[package] = {
+                        "current": current_ver,
+                        "cve": cve_id
+                    }
+
+    return fixable, no_fix
+
+
+def generate_suggestion_report(fixable, no_fix, output_file="suggestions.txt"):
+    """writes suggestion report to suggestions.txt without modifying any files"""
+    with open(output_file, "w") as f:
+        f.write("=" * 60 + "\n")
+        f.write("  SECURITY SCAN REPORT — MANUAL ACTION REQUIRED\n")
+        f.write("=" * 60 + "\n\n")
+
+        if fixable:
+            f.write("FIXABLE VULNERABILITIES:\n")
+            f.write("-" * 40 + "\n")
+            for pkg, info in fixable.items():
+                f.write(f"  Package : {pkg}\n")
+                f.write(f"  Current : {info['current']}\n")
+                f.write(f"  Upgrade : {info['fix_to']}\n")
+                f.write(f"  CVE     : {info['cve']}\n")
+                f.write(f"  Action  : Please upgrade this package manually\n\n")
+
+        if no_fix:
+            f.write("NO FIX AVAILABLE YET:\n")
+            f.write("-" * 40 + "\n")
+            for pkg, info in no_fix.items():
+                f.write(f"  Package : {pkg}\n")
+                f.write(f"  Current : {info['current']}\n")
+                f.write(f"  CVE     : {info['cve']}\n")
+                f.write(f"  Action  : Monitor https://security-tracker.debian.org\n\n")
+
+        f.write("=" * 60 + "\n")
+        f.write("NOTE: No files were auto-modified.\n")
+        f.write("Please review and apply fixes manually.\n")
+        f.write("=" * 60 + "\n")
+
 
 if __name__ == "__main__":
-    print("Scanning trivy report for vulnerable packages...")
-    vulnerable = get_vulnerable_packages()
-    if vulnerable:
-        print(f"Found {len(vulnerable)} packages to fix: {list(vulnerable.keys())}")
-        update_requirements(vulnerable)
-        print("Done! requirements.txt updated with safe versions.")
-    else:
-        print("No vulnerable packages found. Nothing to fix!")
+    print("Scanning trivy report...")
+    fixable, no_fix = get_vulnerabilities()
+    generate_suggestion_report(fixable, no_fix)
+    print(f"Found {len(fixable)} fixable, {len(no_fix)} with no fix available.")
+    print("Suggestion report saved to suggestions.txt")
+    print("No files were auto-modified. Please review suggestions.txt")

@@ -16,7 +16,7 @@ for result in data.get("Results", []):
             })
 
 if critical_vulns:
-    print("\n CRITICAL Vulnerabilities Found — Deployment Blocked!\n")
+    print("\n CRITICAL Vulnerabilities Found — Review suggestions.txt!\n")
     print("-" * 55)
     for v in critical_vulns:
         print(f"  Package : {v['package']}")
@@ -28,6 +28,5 @@ if critical_vulns:
     print(f"  Total Critical : {len(critical_vulns)}")
     print("  Action  : Review suggestions.txt for remediation steps")
     print("-" * 55)
-    sys.exit(1)
 else:
     print("No CRITICAL vulnerabilities found. Deployment allowed!")

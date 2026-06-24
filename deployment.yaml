@@ -15,6 +15,7 @@ spec:
       containers:
       - name: secureops-app
         image: secureops-app:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 5000
 ---

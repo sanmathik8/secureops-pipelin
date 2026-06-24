@@ -1,34 +1,43 @@
 import json
+import sys
 
-with open("trivy-report.json") as f:
+with open("trivy-report.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
-report = open("suggestions.txt", "w")
+critical_vulns = []
 
-report.write("SECURITY SCAN REPORT\n")
-report.write("=" * 50 + "\n\n")
+for result in data.get("Results", []):
+    for vuln in result.get("Vulnerabilities", []):
 
-for result in data["Results"]:
+        if vuln.get("Severity") == "CRITICAL":
+            critical_vulns.append({
+                "PkgName": vuln.get("PkgName", "N/A"),
+                "VulnerabilityID": vuln.get("VulnerabilityID", "N/A"),
+                "InstalledVersion": vuln.get("InstalledVersion", "N/A"),
+                "FixedVersion": vuln.get("FixedVersion", "Not Available"),
+                "Severity": vuln.get("Severity")
+            })
 
-    if "Vulnerabilities" not in result:
-        continue
+# Write file for Git issue stage
+with open("critical.json", "w", encoding="utf-8") as f:
+    json.dump(critical_vulns, f, indent=2)
 
-    for vuln in result["Vulnerabilities"]:
+# Also generate readable log file
+with open("suggestions.txt", "w", encoding="utf-8") as report:
+    report.write("SECURITY REPORT (CRITICAL ONLY)\n")
+    report.write("=" * 50 + "\n\n")
 
-        if vuln["Severity"] not in ["HIGH", "CRITICAL"]:
-            continue
+    for v in critical_vulns:
+        report.write(f"Package : {v['PkgName']}\n")
+        report.write(f"CVE     : {v['VulnerabilityID']}\n")
+        report.write(f"Current : {v['InstalledVersion']}\n")
+        report.write(f"Fixed   : {v['FixedVersion']}\n")
+        report.write("-" * 40 + "\n")
 
-        report.write(f"Package : {vuln['PkgName']}\n")
-        report.write(f"CVE     : {vuln['VulnerabilityID']}\n")
-        report.write(f"Current : {vuln['InstalledVersion']}\n")
+print(f"Critical vulnerabilities found: {len(critical_vulns)}")
 
-        if vuln["FixedVersion"]:
-            report.write(f"Upgrade : {vuln['FixedVersion']}\n")
-            report.write("Action  : Upgrade this package.\n\n")
-        else:
-            report.write("Upgrade : No fix available.\n")
-            report.write("Action  : Monitor Debian Security Tracker.\n\n")
-
-report.close()
-
-print("Suggestion report generated successfully.")
+# FAIL PIPELINE ONLY IF CRITICAL EXISTS
+if len(critical_vulns) > 0:
+    sys.exit(1)
+else:
+    sys.exit(0)

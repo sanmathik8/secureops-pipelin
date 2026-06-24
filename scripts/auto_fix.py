@@ -1,73 +1,34 @@
 import json
 
-def get_vulnerabilities(report_file="trivy-report.json"):
-    """reads trivy report and separates fixable and no-fix vulnerabilities"""
-    with open(report_file) as f:
-        data = json.load(f)
-    
-    fixable = {}
-    no_fix = {}
+with open("trivy-report.json") as f:
+    data = json.load(f)
 
-    for result in data.get("Results", []):
-        for vuln in result.get("Vulnerabilities", []):
-            severity    = vuln.get("Severity")
-            package     = vuln.get("PkgName")
-            current_ver = vuln.get("InstalledVersion")
-            fix_version = vuln.get("FixedVersion")
-            cve_id      = vuln.get("VulnerabilityID")
+report = open("suggestions.txt", "w")
 
-            if severity in ["CRITICAL", "HIGH"] and package:
-                if fix_version:
-                    fixable[package] = {
-                        "current": current_ver,
-                        "fix_to": fix_version,
-                        "cve": cve_id
-                    }
-                else:
-                    no_fix[package] = {
-                        "current": current_ver,
-                        "cve": cve_id
-                    }
+report.write("SECURITY SCAN REPORT\n")
+report.write("=" * 50 + "\n\n")
 
-    return fixable, no_fix
+for result in data["Results"]:
 
+    if "Vulnerabilities" not in result:
+        continue
 
-def generate_suggestion_report(fixable, no_fix, output_file="suggestions.txt"):
-    """writes suggestion report to suggestions.txt without modifying any files"""
-    with open(output_file, "w") as f:
-        f.write("=" * 60 + "\n")
-        f.write("  SECURITY SCAN REPORT — MANUAL ACTION REQUIRED\n")
-        f.write("=" * 60 + "\n\n")
+    for vuln in result["Vulnerabilities"]:
 
-        if fixable:
-            f.write("FIXABLE VULNERABILITIES:\n")
-            f.write("-" * 40 + "\n")
-            for pkg, info in fixable.items():
-                f.write(f"  Package : {pkg}\n")
-                f.write(f"  Current : {info['current']}\n")
-                f.write(f"  Upgrade : {info['fix_to']}\n")
-                f.write(f"  CVE     : {info['cve']}\n")
-                f.write(f"  Action  : Please upgrade this package manually\n\n")
+        if vuln["Severity"] not in ["HIGH", "CRITICAL"]:
+            continue
 
-        if no_fix:
-            f.write("NO FIX AVAILABLE YET:\n")
-            f.write("-" * 40 + "\n")
-            for pkg, info in no_fix.items():
-                f.write(f"  Package : {pkg}\n")
-                f.write(f"  Current : {info['current']}\n")
-                f.write(f"  CVE     : {info['cve']}\n")
-                f.write(f"  Action  : Monitor https://security-tracker.debian.org\n\n")
+        report.write(f"Package : {vuln['PkgName']}\n")
+        report.write(f"CVE     : {vuln['VulnerabilityID']}\n")
+        report.write(f"Current : {vuln['InstalledVersion']}\n")
 
-        f.write("=" * 60 + "\n")
-        f.write("NOTE: No files were auto-modified.\n")
-        f.write("Please review and apply fixes manually.\n")
-        f.write("=" * 60 + "\n")
+        if vuln["FixedVersion"]:
+            report.write(f"Upgrade : {vuln['FixedVersion']}\n")
+            report.write("Action  : Upgrade this package.\n\n")
+        else:
+            report.write("Upgrade : No fix available.\n")
+            report.write("Action  : Monitor Debian Security Tracker.\n\n")
 
+report.close()
 
-if __name__ == "__main__":
-    print("Scanning trivy report...")
-    fixable, no_fix = get_vulnerabilities()
-    generate_suggestion_report(fixable, no_fix)
-    print(f"Found {len(fixable)} fixable, {len(no_fix)} with no fix available.")
-    print("Suggestion report saved to suggestions.txt")
-    print("No files were auto-modified. Please review suggestions.txt")
+print("Suggestion report generated successfully.")

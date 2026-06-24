@@ -1,21 +1,27 @@
 import json
+import os
 
 def get_vulnerability_counts():
 
     high = 0
     critical = 0
 
-    with open("../trivy-report.json") as file:
+    report_file = "/app/trivy-report.json"
+
+    if not os.path.exists(report_file):
+        return 0, 0
+
+    with open(report_file) as file:
         data = json.load(file)
 
-    for result in data["Results"]:
+    for result in data.get("Results", []):
 
-        for vuln in result["Vulnerabilities"]:
+        for vuln in result.get("Vulnerabilities", []):
 
-            if vuln["Severity"] == "HIGH":
-                high = high + 1
+            if vuln.get("Severity") == "HIGH":
+                high += 1
 
-            elif vuln["Severity"] == "CRITICAL":
-                critical = critical + 1
+            elif vuln.get("Severity") == "CRITICAL":
+                critical += 1
 
     return high, critical

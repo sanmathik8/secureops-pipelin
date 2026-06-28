@@ -1,8 +1,8 @@
 from flask import Flask, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Gauge
-from trivy_metrics import get_vulnerability_counts
 import requests
+import json
 import os
 
 app = Flask(__name__)
@@ -11,6 +11,27 @@ metrics = PrometheusMetrics(app)
 vuln_high = Gauge('vulnerability_high_count', 'HIGH vulnerabilities')
 vuln_critical = Gauge('vulnerability_critical_count', 'CRITICAL vulnerabilities')
 security_score = Gauge('security_score', 'Security score 0-100')
+
+def load_report():
+    report_file = "/app/trivy-report.json"
+    if not os.path.exists(report_file):
+        return []
+    with open(report_file) as f:
+        data = json.load(f)
+    vulns = []
+    for result in data.get("Results", []):
+        for vuln in result.get("Vulnerabilities", []):
+            vulns.append(vuln)
+    return vulns
+
+def get_vulnerability_counts():
+    high = critical = 0
+    for vuln in load_report():
+        if vuln.get("Severity") == "HIGH":
+            high += 1
+        elif vuln.get("Severity") == "CRITICAL":
+            critical += 1
+    return high, critical
 
 def calculate_grade(high, critical):
     if critical > 0: return "D", 25
@@ -44,16 +65,20 @@ def vuln_status():
 
 @app.route("/fix-suggestions")
 def fix_suggestions():
-    high, critical = get_vulnerability_counts()
+    vulns = load_report()
     suggestions = []
-    if critical > 0:
-        suggestions.append("Update base image immediately")
-        suggestions.append("Run: trivy image --severity CRITICAL")
-    if high > 0:
-        suggestions.append("Update vulnerable dependencies")
-        suggestions.append("Check Dockerfile for outdated packages")
+    for vuln in vulns:
+        severity = vuln.get("Severity", "")
+        if severity in ["CRITICAL", "HIGH"]:
+            pkg = vuln.get("PkgName", "unknown")
+            cve = vuln.get("VulnerabilityID", "N/A")
+            installed = vuln.get("InstalledVersion", "?")
+            fixed = vuln.get("FixedVersion", "No fix available")
+            suggestions.append(
+                f"{severity} | {cve} | {pkg} {installed} → {fixed}"
+            )
     if not suggestions:
-        suggestions.append("All clear!")
+        suggestions.append("All clear! No critical or high vulnerabilities.")
     return jsonify({"suggestions": suggestions})
 
 if __name__ == "__main__":

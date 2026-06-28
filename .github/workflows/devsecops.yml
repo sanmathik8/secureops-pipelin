@@ -27,6 +27,8 @@ jobs:
             zricethezav/gitleaks:latest \
             detect --source /repo \
             --no-git \
+            --report-format json \
+            --report-path /repo/gitleaks-report.json \
             --verbose || true
 
       - name: Semgrep - SAST
@@ -66,6 +68,70 @@ jobs:
             zap-baseline.py -t http://localhost:5000 \
             -r zap-report.html || true
 
+      - name: Generate Security Report
+        if: always()
+        run: |
+          {
+            echo "================================"
+            echo "  SECUREOPS SECURITY REPORT"
+            echo "  Date: $(date)"
+            echo "  Repo: ${{ github.repository }}"
+            echo "  Branch: ${{ github.ref_name }}"
+            echo "  Commit: ${{ github.sha }}"
+            echo "================================"
+            echo ""
+            echo "[ GITLEAKS - Secrets Detection ]"
+            if [ -f gitleaks-report.json ]; then
+              cat gitleaks-report.json
+            else
+              echo "No secrets found"
+            fi
+            echo ""
+            echo "[ TRIVY - Container Scan ]"
+            if [ -f trivy-report.json ]; then
+              python3 -c "
+import json
+with open('trivy-report.json') as f:
+    data = json.load(f)
+high=0
+critical=0
+for r in data.get('Results',[]):
+    for v in r.get('Vulnerabilities',[]):
+        if v['Severity']=='HIGH':
+            high+=1
+        elif v['Severity']=='CRITICAL':
+            critical+=1
+print('CRITICAL:', critical)
+print('HIGH:', high)
+if critical>0:
+    print('GRADE: D')
+elif high>5:
+    print('GRADE: C')
+elif high>0:
+    print('GRADE: B')
+else:
+    print('GRADE: A')
+"
+            else
+              echo "No trivy report found"
+            fi
+            echo ""
+            echo "[ CHECKOV - IaC Scan ]"
+            echo "See annotations for details"
+            echo ""
+            echo "================================"
+            echo "END OF REPORT"
+            echo "================================"
+          } > report.txt
+          cat report.txt
+
+      - name: Upload Security Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: report.txt
+
       - name: Create GitHub Issue on Critical Vulnerability
         if: always()
         uses: actions/github-script@v7
@@ -78,7 +144,7 @@ jobs:
             for (const result of report.Results || []) {
               for (const vuln of result.Vulnerabilities || []) {
                 if (vuln.Severity === 'CRITICAL') {
-                  criticals.push(`- ${vuln.VulnerabilityID}: ${vuln.PkgName} ${vuln.InstalledVersion} → ${vuln.FixedVersion || 'No fix'}`);
+                  criticals.push('- ' + vuln.VulnerabilityID + ': ' + vuln.PkgName + ' ' + vuln.InstalledVersion + ' -> ' + (vuln.FixedVersion || 'No fix'));
                 }
               }
             }
@@ -86,136 +152,8 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: '🚨 CRITICAL Vulnerabilities Found - ' + new Date().toISOString().split('T')[0],
+                title: 'CRITICAL Vulnerabilities Found - ' + new Date().toISOString().split('T')[0],
                 body: '## Critical Vulnerabilities Detected\n\n' + criticals.join('\n') + '\n\n**Fix immediately!**',
                 labels: ['security', 'critical']
               });
             }
-
-      - name: Generate Security Report
-        if: always()
-        run: |
-          echo "================================" > report.txt
-          echo "  SECUREOPS SECURITY REPORT" >> report.txt
-          echo "  Date: $(date)" >> report.txt
-          echo "  Repo: ${{ github.repository }}" >> report.txt
-          echo "  Branch: ${{ github.ref_name }}" >> report.txt
-          echo "  Commit: ${{ github.sha }}" >> report.txt
-          echo "================================" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ GITLEAKS - Secrets Detection ]" >> report.txt
-          cat gitleaks-report.json 2>/dev/null || echo "No secrets found" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ TRIVY - Container Scan ]" >> report.txt
-          if [ -f trivy-report.json ]; then
-            python3 -c "
-import json
-with open('trivy-report.json') as f:
-    data = json.load(f)
-high=0; critical=0
-for r in data.get('Results',[]):
-    for v in r.get('Vulnerabilities',[]):
-        if v['Severity']=='HIGH': high+=1
-        elif v['Severity']=='CRITICAL': critical+=1
-print(f'CRITICAL: {critical}')
-print(f'HIGH: {high}')
-if critical>0: print('GRADE: D')
-elif high>5: print('GRADE: C')
-elif high>0: print('GRADE: B')
-else: print('GRADE: A')
-" >> report.txt
-          else
-            echo "No trivy report found" >> report.txt
-          fi
-          
-          echo "" >> report.txt
-          echo "[ SEMGREP - SAST ]" >> report.txt
-          cat semgrep-report.txt 2>/dev/null || echo "See logs for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ CHECKOV - IaC Scan ]" >> report.txt
-          echo "See annotations for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ OWASP ZAP - DAST ]" >> report.txt
-          cat zap-report.html 2>/dev/null | grep -o 'WARN-NEW.*' | head -20 >> report.txt || echo "See logs for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "================================" >> report.txt
-          echo "END OF REPORT" >> report.txt
-          echo "================================" >> report.txt
-          
-          cat report.txt
-
-      - name: Upload Security Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: report.txt
-
-      - name: Generate Security Report
-        if: always()
-        run: |
-          echo "================================" > report.txt
-          echo "  SECUREOPS SECURITY REPORT" >> report.txt
-          echo "  Date: $(date)" >> report.txt
-          echo "  Repo: ${{ github.repository }}" >> report.txt
-          echo "  Branch: ${{ github.ref_name }}" >> report.txt
-          echo "  Commit: ${{ github.sha }}" >> report.txt
-          echo "================================" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ GITLEAKS - Secrets Detection ]" >> report.txt
-          cat gitleaks-report.json 2>/dev/null || echo "No secrets found" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ TRIVY - Container Scan ]" >> report.txt
-          if [ -f trivy-report.json ]; then
-            python3 -c "
-import json
-with open('trivy-report.json') as f:
-    data = json.load(f)
-high=0; critical=0
-for r in data.get('Results',[]):
-    for v in r.get('Vulnerabilities',[]):
-        if v['Severity']=='HIGH': high+=1
-        elif v['Severity']=='CRITICAL': critical+=1
-print(f'CRITICAL: {critical}')
-print(f'HIGH: {high}')
-if critical>0: print('GRADE: D')
-elif high>5: print('GRADE: C')
-elif high>0: print('GRADE: B')
-else: print('GRADE: A')
-" >> report.txt
-          else
-            echo "No trivy report found" >> report.txt
-          fi
-          
-          echo "" >> report.txt
-          echo "[ SEMGREP - SAST ]" >> report.txt
-          cat semgrep-report.txt 2>/dev/null || echo "See logs for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ CHECKOV - IaC Scan ]" >> report.txt
-          echo "See annotations for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "[ OWASP ZAP - DAST ]" >> report.txt
-          cat zap-report.html 2>/dev/null | grep -o 'WARN-NEW.*' | head -20 >> report.txt || echo "See logs for details" >> report.txt
-          
-          echo "" >> report.txt
-          echo "================================" >> report.txt
-          echo "END OF REPORT" >> report.txt
-          echo "================================" >> report.txt
-          
-          cat report.txt
-
-      - name: Upload Security Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: report.txt

@@ -1,0 +1,49 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks - Secrets Detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Semgrep - SAST
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/security-audit p/secrets
+
+      - name: Build Docker Image
+        run: docker build -t secureops:${{ github.sha }} .
+
+      - name: Trivy - Container Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: secureops:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+      - name: Checkov - IaC Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          soft_fail: true
+
+      - name: Notify n8n
+        if: always()
+        run: |
+          curl -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
+          -H "Content-Type: application/json" \
+          -d '{"repo": "${{ github.repository }}", "status": "${{ job.status }}", "branch": "${{ github.ref_name }}"}'

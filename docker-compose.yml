@@ -1,36 +1,41 @@
+version: '3.8'
+
 services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+    volumes:
+      - ./trivy-report.json:/app/trivy-report.json
+    depends_on:
+      - prometheus
+
   prometheus:
     image: prom/prometheus
-    container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-storage:/prometheus
 
   grafana:
     image: grafana/grafana
-    container_name: grafana
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
-    volumes:
-      - grafana-storage:/var/lib/grafana
+      - GF_SECURITY_ADMIN_PASSWORD=admin
 
   n8n:
     image: n8nio/n8n
-    container_name: n8n
     ports:
       - "5678:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
     volumes:
-      - n8n-storage:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
 
 volumes:
-  grafana-storage:
-  prometheus-storage:
-  n8n-storage:
+  n8n_data:

@@ -6,13 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  issues: write
+  security-events: write
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-      security-events: write
 
     steps:
       - name: Checkout code
@@ -60,7 +61,7 @@ jobs:
         with:
           target: http://localhost:5000
           fail_action: false
-          artifact_name: zap-scan-report
+          issue_title: ZAP Baseline Scan Report
 
       - name: Create GitHub Issue on Critical Vulnerability
         if: always()

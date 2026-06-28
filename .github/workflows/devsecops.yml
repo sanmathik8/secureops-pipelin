@@ -70,33 +70,7 @@ jobs:
 
       - name: Parse Trivy Report
         if: always()
-        run: |
-          if [ -f trivy-report.json ]; then
-            python3 << 'PYEOF'
-import json
-with open('trivy-report.json') as f:
-    data = json.load(f)
-high=0
-critical=0
-for r in data.get('Results',[]):
-    for v in r.get('Vulnerabilities',[]):
-        if v['Severity']=='HIGH':
-            high+=1
-        elif v['Severity']=='CRITICAL':
-            critical+=1
-if critical>0:
-    grade='D'
-elif high>5:
-    grade='C'
-elif high>0:
-    grade='B'
-else:
-    grade='A'
-with open('trivy-summary.txt','w') as f:
-    f.write(f'CRITICAL: {critical}\nHIGH: {high}\nGRADE: {grade}\n')
-print(f'CRITICAL: {critical}, HIGH: {high}, GRADE: {grade}')
-PYEOF
-          fi
+        run: python3 parse_trivy.py
 
       - name: Generate Security Report
         if: always()
@@ -109,13 +83,13 @@ PYEOF
           echo "  Commit: ${{ github.sha }}" >> report.txt
           echo "================================" >> report.txt
           echo "" >> report.txt
-          echo "[ GITLEAKS ]" >> report.txt
+          echo "[ GITLEAKS - Secrets Detection ]" >> report.txt
           cat gitleaks-report.json 2>/dev/null || echo "No secrets found" >> report.txt
           echo "" >> report.txt
-          echo "[ TRIVY ]" >> report.txt
+          echo "[ TRIVY - Container Scan ]" >> report.txt
           cat trivy-summary.txt 2>/dev/null || echo "No trivy report" >> report.txt
           echo "" >> report.txt
-          echo "[ CHECKOV ]" >> report.txt
+          echo "[ CHECKOV - IaC Scan ]" >> report.txt
           echo "See annotations tab for details" >> report.txt
           echo "" >> report.txt
           echo "================================" >> report.txt

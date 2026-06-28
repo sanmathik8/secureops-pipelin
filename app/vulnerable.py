@@ -25,3 +25,4 @@ def hash_password(password):
 def start_app():
     app.run(debug=True, host="0.0.0.0")
 # test
+SECRET_KEY = "mynewsecret12345"

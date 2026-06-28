@@ -24,3 +24,4 @@ def hash_password(password):
 # Debug mode on - Semgrep will catch this
 def start_app():
     app.run(debug=True, host="0.0.0.0")
+# test

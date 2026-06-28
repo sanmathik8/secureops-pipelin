@@ -61,7 +61,7 @@ jobs:
         with:
           target: http://localhost:5000
           fail_action: false
-          issue_title: ZAP Baseline Scan Report
+          artifact_name: zap-report
 
       - name: Create GitHub Issue on Critical Vulnerability
         if: always()

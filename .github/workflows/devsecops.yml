@@ -68,28 +68,11 @@ jobs:
             zap-baseline.py -t http://localhost:5000 \
             -r zap-report.html || true
 
-      - name: Generate Security Report
+      - name: Parse Trivy Report
         if: always()
         run: |
-          {
-            echo "================================"
-            echo "  SECUREOPS SECURITY REPORT"
-            echo "  Date: $(date)"
-            echo "  Repo: ${{ github.repository }}"
-            echo "  Branch: ${{ github.ref_name }}"
-            echo "  Commit: ${{ github.sha }}"
-            echo "================================"
-            echo ""
-            echo "[ GITLEAKS - Secrets Detection ]"
-            if [ -f gitleaks-report.json ]; then
-              cat gitleaks-report.json
-            else
-              echo "No secrets found"
-            fi
-            echo ""
-            echo "[ TRIVY - Container Scan ]"
-            if [ -f trivy-report.json ]; then
-              python3 -c "
+          if [ -f trivy-report.json ]; then
+            python3 << 'PYEOF'
 import json
 with open('trivy-report.json') as f:
     data = json.load(f)
@@ -101,28 +84,43 @@ for r in data.get('Results',[]):
             high+=1
         elif v['Severity']=='CRITICAL':
             critical+=1
-print('CRITICAL:', critical)
-print('HIGH:', high)
 if critical>0:
-    print('GRADE: D')
+    grade='D'
 elif high>5:
-    print('GRADE: C')
+    grade='C'
 elif high>0:
-    print('GRADE: B')
+    grade='B'
 else:
-    print('GRADE: A')
-"
-            else
-              echo "No trivy report found"
-            fi
-            echo ""
-            echo "[ CHECKOV - IaC Scan ]"
-            echo "See annotations for details"
-            echo ""
-            echo "================================"
-            echo "END OF REPORT"
-            echo "================================"
-          } > report.txt
+    grade='A'
+with open('trivy-summary.txt','w') as f:
+    f.write(f'CRITICAL: {critical}\nHIGH: {high}\nGRADE: {grade}\n')
+print(f'CRITICAL: {critical}, HIGH: {high}, GRADE: {grade}')
+PYEOF
+          fi
+
+      - name: Generate Security Report
+        if: always()
+        run: |
+          echo "================================" > report.txt
+          echo "  SECUREOPS SECURITY REPORT" >> report.txt
+          echo "  Date: $(date)" >> report.txt
+          echo "  Repo: ${{ github.repository }}" >> report.txt
+          echo "  Branch: ${{ github.ref_name }}" >> report.txt
+          echo "  Commit: ${{ github.sha }}" >> report.txt
+          echo "================================" >> report.txt
+          echo "" >> report.txt
+          echo "[ GITLEAKS ]" >> report.txt
+          cat gitleaks-report.json 2>/dev/null || echo "No secrets found" >> report.txt
+          echo "" >> report.txt
+          echo "[ TRIVY ]" >> report.txt
+          cat trivy-summary.txt 2>/dev/null || echo "No trivy report" >> report.txt
+          echo "" >> report.txt
+          echo "[ CHECKOV ]" >> report.txt
+          echo "See annotations tab for details" >> report.txt
+          echo "" >> report.txt
+          echo "================================" >> report.txt
+          echo "END OF REPORT" >> report.txt
+          echo "================================" >> report.txt
           cat report.txt
 
       - name: Upload Security Report
